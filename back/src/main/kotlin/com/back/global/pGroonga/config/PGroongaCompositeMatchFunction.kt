@@ -1,4 +1,4 @@
-package com.back.global.pGroonga.config
+package com.back.global.pgroonga.config
 
 import org.hibernate.metamodel.model.domain.ReturnableType
 import org.hibernate.query.sqm.function.AbstractSqmSelfRenderingFunctionDescriptor
@@ -58,7 +58,7 @@ class PGroongaCompositeMatchFunction(
             if (size >= minCount) return
 
             throw FunctionArgumentException(
-                "Function $functionName() requires at least $minCount arguments, but $size arguments given"
+                "Function $functionName() requires at least $minCount arguments, but $size arguments given",
             )
         }
     }

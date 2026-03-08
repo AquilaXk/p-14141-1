@@ -1,10 +1,10 @@
 plugins {
-    kotlin("kapt") version "2.2.21"
     kotlin("jvm") version "2.2.21"
-    kotlin("plugin.jpa") version "2.2.21"
     kotlin("plugin.spring") version "2.2.21"
-    id("io.spring.dependency-management") version "1.1.7"
     id("org.springframework.boot") version "4.0.3"
+    id("io.spring.dependency-management") version "1.1.7"
+    kotlin("plugin.jpa") version "2.2.21"
+    kotlin("kapt") version "2.2.21"
 }
 
 group = "com"
@@ -37,7 +37,6 @@ dependencies {
     implementation("io.jsonwebtoken:jjwt-api:0.13.0")
     runtimeOnly("io.jsonwebtoken:jjwt-impl:0.13.0")
     runtimeOnly("io.jsonwebtoken:jjwt-jackson:0.13.0")
-    implementation("org.springframework.security:spring-security-core")
 
     // QueryDSL
     implementation("io.github.openfeign.querydsl:querydsl-jpa:7.1") {

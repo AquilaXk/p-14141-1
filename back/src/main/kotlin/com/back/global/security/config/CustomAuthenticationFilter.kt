@@ -8,6 +8,7 @@ import com.back.global.exception.app.AppException
 import com.back.global.rsData.RsData
 import com.back.global.security.domain.SecurityUser
 import jakarta.servlet.FilterChain
+import jakarta.servlet.http.Cookie
 import jakarta.servlet.http.HttpServletRequest
 import jakarta.servlet.http.HttpServletResponse
 import org.springframework.http.HttpHeaders
@@ -74,6 +75,10 @@ class CustomAuthenticationFilter(
             ?: throw AppException("401-3", "API 키가 유효하지 않습니다.")
 
         val newAccessToken = actorFacade.genAccessToken(member)
+        response.addCookie(Cookie("accessToken", newAccessToken).apply {
+            path = "/"
+            isHttpOnly = true
+        })
         response.addHeader(HttpHeaders.AUTHORIZATION, newAccessToken)
 
         authenticate(member)
