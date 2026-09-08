@@ -51,7 +51,10 @@ class V20260903_02__reconcile_profile_workspace_snapshots : BaseJavaMigration() 
         if (inserts.isNotEmpty()) {
             connection
                 .prepareStatement(
-                    "INSERT INTO member_attr (subject_id, name, str_value) VALUES (?, ?, ?)",
+                    """
+                    INSERT INTO member_attr (id, subject_id, name, str_value, created_at, modified_at)
+                    VALUES (nextval('member_attr_seq'), ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+                    """.trimIndent(),
                 ).use { statement ->
                     inserts.forEach { insert ->
                         statement.setLong(1, insert.memberId)

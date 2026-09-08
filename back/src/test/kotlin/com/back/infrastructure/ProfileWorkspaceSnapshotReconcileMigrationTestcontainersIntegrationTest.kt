@@ -85,6 +85,12 @@ class ProfileWorkspaceSnapshotReconcileMigrationTestcontainersIntegrationTest {
 
             val existingBefore = workspaceRows(connection, 1)
             val legacyBefore = legacyAttrs(connection, 3)
+            // Hibernate가 만든 기존 테이블에서는 ID와 감사 시각을 DB 기본값이 채워주지 않는다.
+            connection.createStatement().use { statement ->
+                statement.execute("ALTER TABLE member_attr ALTER COLUMN id DROP DEFAULT")
+                statement.execute("ALTER TABLE member_attr ALTER COLUMN created_at DROP DEFAULT")
+                statement.execute("ALTER TABLE member_attr ALTER COLUMN modified_at DROP DEFAULT")
+            }
             assertEquals(1, executeMigration())
 
             assertEquals(12, workspaceCount(connection))

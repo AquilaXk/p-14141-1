@@ -1860,7 +1860,7 @@ jobs:
             rollback_and_exit "profile_workspace_baseline_stage_failed"
           fi
 
-          if ! docker compose --env-file deploy/homeserver/.env.prod -f deploy/homeserver/docker-compose.prod.yml exec -T db_1 psql -U postgres -d "$(resolve_active_prod_db_name)" -Atq -v ON_ERROR_STOP=1 -v cutover_sha="${HOME_DEPLOY_SHA}" -v expected_marker_sha="${PROFILE_WORKSPACE_BASELINE_MARKER_SHA}" -f deploy/homeserver/sql/retire_profile_workspace_legacy.sql >/dev/null 2>&1; then
+          if ! docker compose --env-file deploy/homeserver/.env.prod -f deploy/homeserver/docker-compose.prod.yml exec -T db_1 psql -U postgres -d "$(resolve_active_prod_db_name)" -Atq -v ON_ERROR_STOP=1 -v cutover_sha="${HOME_DEPLOY_SHA}" -v expected_marker_sha="${PROFILE_WORKSPACE_BASELINE_MARKER_SHA}" -f - < deploy/homeserver/sql/retire_profile_workspace_legacy.sql >/dev/null 2>&1; then
             rollback_and_exit "profile_workspace_legacy_retirement_failed"
           fi
 

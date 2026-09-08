@@ -4275,6 +4275,40 @@ test("rollback 복원 기준점은 마지막 성공 배포 baseline으로 고정
   assert.match(gitignore, /deploy\/homeserver\/\.deploy-baseline\*/)
 })
 
+test("profile retirement streams host SQL to container stdin and propagates failure", () => {
+  const workflow = readFileSync(workflowPath, "utf8")
+  const command = workflow.match(/^ +if ! docker compose[^\n]*retire_profile_workspace_legacy\.sql[^\n]*; then\n[^\n]*\n +fi/m)?.[0]
+  assert.ok(command, "retirement command must exist")
+  const workDir = mkdtempSync(path.join(tmpdir(), "aquila-retirement-stdin-"))
+  const capturePath = path.join(workDir, "stdin.sql")
+  try {
+    // 컨테이너에 checkout이 없다는 조건을 재현하고 실제 workflow의 stdin 전달을 확인한다.
+    const script = `
+      resolve_active_prod_db_name() { echo fixture; }
+      rollback_and_exit() { exit 77; }
+      docker() {
+        [ "\${*: -2}" = "-f -" ] || return 66
+        cat > "$CAPTURE_PATH"
+        return "$DATABASE_EXIT"
+      }
+      ${command}
+    `
+    const options = {
+      cwd: repoRoot,
+      env: { ...process.env, CAPTURE_PATH: capturePath, DATABASE_EXIT: "0" },
+      stdio: "pipe",
+    }
+    execFileSync("bash", ["-c", script], options)
+    assert.equal(readFileSync(capturePath, "utf8"), readFileSync(path.join(repoRoot, "deploy/homeserver/sql/retire_profile_workspace_legacy.sql"), "utf8"))
+    assert.throws(
+      () => execFileSync("bash", ["-c", script], { ...options, env: { ...options.env, DATABASE_EXIT: "1" } }),
+      (error) => error.status === 77,
+    )
+  } finally {
+    rmSync(workDir, { recursive: true, force: true })
+  }
+})
+
 test("연속 실패한 배포가 rollback 복원 기준점을 마지막 성공 배포에서 밀어내지 않는다", () => {
   const successCompose = "services:\n  db_1: {}\n"
   const successCaddy = "api {\n  reverse_proxy back_green:8080\n}\n"
