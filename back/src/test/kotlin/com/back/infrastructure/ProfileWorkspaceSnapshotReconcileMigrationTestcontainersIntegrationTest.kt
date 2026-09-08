@@ -1,5 +1,6 @@
 package com.back.infrastructure
 
+import com.back.boundedContexts.member.domain.shared.memberMixin.MemberProfileAboutProjectBlock
 import com.back.boundedContexts.member.domain.shared.memberMixin.MemberProfileAboutSectionBlock
 import com.back.boundedContexts.member.domain.shared.memberMixin.MemberProfileLinkItem
 import com.back.boundedContexts.member.domain.shared.memberMixin.MemberProfileWorkspaceContent
@@ -97,6 +98,71 @@ class ProfileWorkspaceSnapshotReconcileMigrationTestcontainersIntegrationTest {
             assertEquals(MemberProfileWorkspaceContent(), decodedWorkspace(connection, 6, "profileWorkspacePublished"))
             assertNull(rawWorkspace(connection, 7, "profileWorkspaceDraft"))
             assertEquals("JDBC", migrationType(connection, "20260903.02"))
+        }
+    }
+
+    @Test
+    fun `preserves populated canonical projects and links byte for byte`() {
+        postgres.createConnection("").use { connection ->
+            insertMembers(connection, 1L..1L)
+            val content =
+                MemberProfileWorkspaceContent(
+                    aboutProjectSectionTitle = "Selected work",
+                    aboutProjects =
+                        listOf(
+                            MemberProfileAboutProjectBlock(
+                                id = "research",
+                                name = "Research Notes",
+                                summary = "Experiment records",
+                                role = "Maintainer",
+                                href = "https://example.com/research",
+                                linkLabel = "Read notes",
+                            ),
+                        ),
+                    serviceLinks = listOf(MemberProfileLinkItem("github", "Source", "https://example.com/source")),
+                    contactLinks = listOf(MemberProfileLinkItem("mail", "Contact", "mailto:owner@example.com")),
+                )
+            val draft = encodeMemberProfileWorkspaceContent(content)
+            val published = encodeMemberProfileWorkspaceContent(content.copy(aboutProjectSectionTitle = "Published work"))
+            insertAttr(connection, 1, "profileWorkspaceDraft", draft)
+            insertAttr(connection, 1, "profileWorkspacePublished", published)
+            val before = workspaceRows(connection, 1)
+
+            assertEquals(1, executeMigration())
+
+            assertEquals(before, workspaceRows(connection, 1))
+            assertEquals(draft, rawWorkspace(connection, 1, "profileWorkspaceDraft"))
+            assertEquals(published, rawWorkspace(connection, 1, "profileWorkspacePublished"))
+        }
+    }
+
+    @Test
+    fun `converts legacy Markdown sections and projects without dropping their text`() {
+        postgres.createConnection("").use { connection ->
+            insertMembers(connection, 1L..1L)
+            val legacy = "# About\n- Maintainer\n---\n## Projects\n- Research Notes\n---\n# Notes\n- Stable"
+            insertAttr(connection, 1, "aboutDetails", legacy)
+
+            assertEquals(1, executeMigration())
+
+            val raw = rawWorkspace(connection, 1, "profileWorkspaceDraft")
+            assertEquals(raw, rawWorkspace(connection, 1, "profileWorkspacePublished"))
+            val content = jacksonObjectMapper().readTree(raw).path("content")
+            // 기대값은 migration 정규화 함수를 재호출하지 않고 저장 결과에서 직접 확인한다.
+            assertEquals(jacksonObjectMapper().readTree("\"Projects\""), content.path("aboutProjectSectionTitle"))
+            assertEquals(
+                jacksonObjectMapper().readTree(
+                    """[{"id":"project-1","name":"Research Notes","summary":"","role":"","href":"","linkLabel":""}]""",
+                ),
+                content.path("aboutProjects"),
+            )
+            assertEquals(
+                jacksonObjectMapper().readTree(
+                    """[{"id":"legacy-1","title":"About","items":["Maintainer"],"dividerBefore":false},{"id":"legacy-3","title":"Notes","items":["Stable"],"dividerBefore":true}]""",
+                ),
+                content.path("aboutSections"),
+            )
+            assertEquals(listOf(listOf("aboutDetails", legacy)), legacyAttrs(connection, 1))
         }
     }
 
