@@ -326,6 +326,34 @@ test("served cutovers do not retain temporary Flyway lifecycle callbacks", () =>
   assert.doesNotMatch(compatibilityAcceptance, /beforeMigrate__|retired persistence recovery/)
 })
 
+test("required standalone owns full-union coverage without a duplicate fast-only threshold", () => {
+  const gradle = fs.readFileSync(jacocoGradlePath, "utf8")
+  const full = extractBalancedBlock(gradle, 'tasks.named<JacocoCoverageVerification>("jacocoTestCoverageVerification")')
+  const report = extractBalancedBlock(gradle, 'tasks.named<JacocoReport>("jacocoTestReport")')
+  const check = extractBalancedBlock(gradle, 'tasks.named("check")')
+  const fast = extractBalancedBlock(gradle, 'tasks.register("ciFastCheck")')
+  const rule = extractBalancedBlock(gradle, 'fun JacocoCoverageVerification.configureLineCoverageRule()')
+  assert.match(gradle, /val fastTestTaskNames = listOf\("test"\)/)
+  assert.match(gradle, /val fullTestTaskNames = fastTestTaskNames \+ "testcontainersTest"/)
+  for (const block of [full, report]) {
+    assert.match(block, /classDirectories\.setFrom\(jacocoMainClassDirectories\(\)\)/)
+    assert.match(block, /executionData\.setFrom\(jacocoExecutionDataFor\(fullTestTaskNames\)\)/)
+  }
+  assert.match(report, /dependsOn\(fullTestTaskNames\)/)
+  assert.match(full, /dependsOn\(tasks\.named<JacocoReport>\("jacocoTestReport"\)\)/)
+  assert.match(full, /configureLineCoverageRule\(\)/)
+  assert.match(rule, /counter = "LINE"/)
+  assert.match(rule, /minimum = "1\.00"\.toBigDecimal\(\)/)
+  assert.match(check, /dependsOn\(tasks\.named<JacocoCoverageVerification>\("jacocoTestCoverageVerification"\)\)/)
+  assert.match(check, /dependsOn\("verifyJacocoBaselineExclusions"\)/)
+  for (const task of ["test", "jacocoPrReport", "jacocoPrFullCoverageReport", "verifyJacocoBaselineExclusions", "ktlintCheck"]) {
+    assert.ok(fast.includes(`"${task}"`))
+  }
+  const standalone = fs.readFileSync(path.join(root, "tools/repo-split/verify-platform-standalone.sh"), "utf8")
+  assert.match(standalone, /\.\/gradlew check --rerun-tasks/)
+  assert.doesNotMatch(gradle, /ciFastCoverageVerification/)
+})
+
 test("Gradle resolves the approved Testcontainers family version in PR and main gates", () => {
   const buildGradle = fs.readFileSync(buildGradlePath, "utf8")
   const jacocoGradle = fs.readFileSync(jacocoGradlePath, "utf8")

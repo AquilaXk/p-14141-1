@@ -388,7 +388,7 @@ jobs:
         run: ./gradlew ciFastCheck --rerun-tasks
 
       # main/push(release trunk)는 Testcontainers를 포함한 full check를 required로 실행한다.
-      # PR는 속도용 ciFastCheck만 유지하며, merge 완료 판정은 main gate가 담당한다.
+      # PR의 전체 테스트·통합 커버리지는 필수 Platform Standalone job이 담당한다.
       - name: Run backend full check
         if: steps.changes.outputs.backend == 'true' && github.event_name != 'pull_request'
         working-directory: back

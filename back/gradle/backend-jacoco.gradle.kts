@@ -143,14 +143,6 @@ tasks.register<JacocoReport>("jacocoFullTestReport") {
     }
 }
 
-tasks.register<JacocoCoverageVerification>("ciFastCoverageVerification") {
-    description = "Verifies 100% line coverage after static and baseline exclusions."
-    dependsOn(fastTestTaskNames)
-    classDirectories.setFrom(jacocoMainClassDirectories())
-    executionData.setFrom(jacocoExecutionDataFor(fastTestTaskNames))
-    configureLineCoverageRule()
-}
-
 tasks.named<JacocoCoverageVerification>("jacocoTestCoverageVerification") {
     dependsOn(tasks.named<JacocoReport>("jacocoTestReport"))
     classDirectories.setFrom(jacocoMainClassDirectories())
@@ -188,7 +180,6 @@ tasks.register("ciFastCheck") {
         "test",
         "jacocoPrReport",
         "jacocoPrFullCoverageReport",
-        "ciFastCoverageVerification",
         "verifyJacocoBaselineExclusions",
         "verifyAwsSdkHttpClientBoundary",
         "verifyTestcontainersVersionAlignment",

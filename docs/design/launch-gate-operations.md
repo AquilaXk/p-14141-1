@@ -98,6 +98,9 @@ Merge 전 PR 본문 또는 review note에는 다음 항목을 남긴다.
   combined 100% line-coverage gate after the existing reviewed exclusions.
 - Run the full `check` through the reusable backend job on main pushes as well.
   A passing fast check does not replace the standalone or main checks.
+- Keep fast coverage reports informational. Apply the 100% threshold to the
+  combined unit and PostgreSQL test evidence in the required full check, not to
+  the incomplete fast-test subset. Keep the baseline exclusion lock in both paths.
 - Preserve `jacocoTestReport.xml` in the standalone artifact when generated,
   including on failure. Keep the failed gate exit status and temporary cleanup.
 - Stop delivery when the required full checks or restore drill fail; do not
