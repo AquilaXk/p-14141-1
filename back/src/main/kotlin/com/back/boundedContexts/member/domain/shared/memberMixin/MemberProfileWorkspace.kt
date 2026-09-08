@@ -6,6 +6,7 @@ import com.back.standard.util.Ut
 import java.net.URI
 import java.time.Instant
 import java.util.Locale
+import kotlin.jvm.JvmDefaultWithoutCompatibility
 
 const val PROFILE_WORKSPACE_DRAFT = "profileWorkspaceDraft"
 const val PROFILE_WORKSPACE_PUBLISHED = "profileWorkspacePublished"
@@ -195,6 +196,8 @@ fun decodeMemberProfileWorkspaceContent(rawValue: String?): MemberProfileWorkspa
     return normalized.takeIf { encodeMemberProfileWorkspaceContent(it) == rawValue }
 }
 
+// 소비자를 함께 컴파일하는 애플리케이션 내부 계약이므로 구형 JVM 호환 bridge는 생성하지 않는다.
+@JvmDefaultWithoutCompatibility
 interface MemberHasProfileWorkspace : MemberAware {
     fun getProfileWorkspaceDraftAttr(loader: (() -> MemberAttr)? = null): MemberAttr =
         member.getOrPutAttr(PROFILE_WORKSPACE_DRAFT) {
