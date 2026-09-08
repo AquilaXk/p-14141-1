@@ -50,7 +50,7 @@ class PostReadCacheInvalidatorTest {
     }
 
     @Test
-    @DisplayName("공개 글 변경은 hot feed, 검색 첫 페이지, 영향 태그, 상세 캐시를 함께 축출한다")
+    @DisplayName("공개 글 변경은 hot feed, 모든 검색 결과, 영향 태그, 상세 캐시를 함께 축출한다")
     fun invalidatePublicPostReadCaches() {
         // given
         val callbackCalls = mutableListOf<Unit>()
@@ -77,8 +77,15 @@ class PostReadCacheInvalidatorTest {
             PostQueryCacheNames.BOOTSTRAP,
             PostPublicReadQueryService.buildBootstrapCacheKey(30, PostSearchSortType1.LIKES_COUNT, ""),
         )
-        put(PostQueryCacheNames.SEARCH, "page=1:size=30:sort=CREATED_AT:kw=_")
-        put(PostQueryCacheNames.SEARCH_NEGATIVE, "page=1:size=30:sort=CREATED_AT:kw=_")
+        val searchKeys =
+            listOf(
+                "page=1:size=30:sort=CREATED_AT:kw=kotlin",
+                "page=2:size=16:sort=HIT_COUNT:kw=spring",
+            )
+        searchKeys.forEach { key ->
+            put(PostQueryCacheNames.SEARCH, key)
+            put(PostQueryCacheNames.SEARCH_NEGATIVE, key)
+        }
         put(PostQueryCacheNames.TAGS, "public")
         put(PostQueryCacheNames.DETAIL_PUBLIC_SNAPSHOT, 77L)
         put(PostQueryCacheNames.DETAIL_PUBLIC_META, 77L)
@@ -129,8 +136,10 @@ class PostReadCacheInvalidatorTest {
                 PostPublicReadQueryService.buildBootstrapCacheKey(30, PostSearchSortType1.LIKES_COUNT, ""),
             ),
         ).isNull()
-        assertThat(get(PostQueryCacheNames.SEARCH, "page=1:size=30:sort=CREATED_AT:kw=_")).isNull()
-        assertThat(get(PostQueryCacheNames.SEARCH_NEGATIVE, "page=1:size=30:sort=CREATED_AT:kw=_")).isNull()
+        searchKeys.forEach { key ->
+            assertThat(get(PostQueryCacheNames.SEARCH, key)).isNull()
+            assertThat(get(PostQueryCacheNames.SEARCH_NEGATIVE, key)).isNull()
+        }
         assertThat(get(PostQueryCacheNames.TAGS, "public")).isNull()
         assertThat(get(PostQueryCacheNames.DETAIL_PUBLIC_SNAPSHOT, 77L)).isNull()
         assertThat(get(PostQueryCacheNames.DETAIL_PUBLIC_META, 77L)).isNull()
