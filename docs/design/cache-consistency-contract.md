@@ -19,7 +19,9 @@
 
 ## Consistency guarantee
 
-- 공개 feed/detail ETag seed는 post modified time, version, count fields, author public representation을 포함한다.
+- Keep feed ETag seeds sensitive to the displayed post and author representation.
+- Check current public-detail eligibility before server-side cache reads. Return
+  anonymous detail with private/no-store headers and no ETag or shared-cache tags.
 - author representation은 `authorId`, `authorName`, `authorUsername`, profile image URL 계열을 length-prefixed token으로 포함한다.
 - post write side effect는 DB commit 이후 task로 실행되어 read cache eviction, CDN purge event, recommendation refresh/evict를 분리 수행한다.
 - author nickname/profile image 변경은 `MemberPublicProfileChangedEvent`로 발행되고, post read cache는 `invalidateAuthorRepresentation`으로 clear된다.

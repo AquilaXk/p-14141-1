@@ -2,7 +2,6 @@ package com.back.boundedContexts.post.adapter.web
 
 import com.back.boundedContexts.post.dto.CursorFeedPageDto
 import com.back.boundedContexts.post.dto.FeedPostDto
-import com.back.boundedContexts.post.dto.PostWithContentDto
 import com.back.boundedContexts.post.dto.PublicPostsBootstrapDto
 import com.back.boundedContexts.post.dto.TagCountDto
 import com.back.standard.dto.page.PageDto
@@ -70,42 +69,6 @@ class PostPublicReadEtagSeedBuilder {
             append(itemsToken)
         }
     }
-
-    fun buildPublicDetailEtagSeed(data: PostWithContentDto): String =
-        buildString {
-            append(data.id)
-            append("|")
-            append(toEpochMillis(data.modifiedAt))
-            append("|")
-            append(data.version)
-            append("|")
-            append(data.likesCount)
-            append("|")
-            append(data.hitCount)
-            append("|content=")
-            append(
-                buildNullableLengthPrefixedToken(
-                    data.title,
-                    data.content,
-                    data.contentHtml,
-                    data.contentHtmlHash,
-                    data.contentHtmlSanitizerPolicyVersion,
-                    data.contentHtmlTrustState.name,
-                    data.summary,
-                    data.summarySource.name,
-                ),
-            )
-            append("|author=")
-            append(
-                buildLengthPrefixedToken(
-                    data.authorId.toString(),
-                    data.authorName,
-                    data.authorUsername,
-                    data.authorProfileImageUrl,
-                    data.authorProfileImageDirectUrl,
-                ),
-            )
-        }
 
     fun buildTagsEtagSeed(tags: List<TagCountDto>): String = tags.joinToString(separator = "|") { "${it.tag}:${it.count}" }
 

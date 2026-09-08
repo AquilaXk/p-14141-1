@@ -2,12 +2,9 @@ package com.back.boundedContexts.post.adapter.web
 
 import com.back.boundedContexts.post.dto.CursorFeedPageDto
 import com.back.boundedContexts.post.dto.FeedPostDto
-import com.back.boundedContexts.post.dto.PostWithContentDto
 import com.back.boundedContexts.post.dto.PublicPostsBootstrapDto
 import com.back.boundedContexts.post.dto.TagCountDto
 import com.back.boundedContexts.post.model.PostSummarySource
-import com.back.global.security.application.ContentHtmlTrustState
-import com.back.global.security.application.HtmlContentSanitizer
 import com.back.standard.dto.page.PageDto
 import com.back.standard.dto.page.PageableDto
 import com.back.standard.dto.post.type1.PostSearchSortType1
@@ -283,27 +280,6 @@ class PostPublicReadResponseFactoryTest {
                 tag = " backend ",
                 data = cursorFeed,
             )
-        val detailSeed =
-            responseFactory.buildPublicDetailEtagSeed(
-                PostWithContentDto(
-                    id = 9L,
-                    createdAt = Instant.parse("2026-01-01T00:00:00Z"),
-                    modifiedAt = Instant.parse("2026-01-03T00:00:00Z"),
-                    authorId = 1L,
-                    authorName = "Author",
-                    authorUsername = "author",
-                    authorProfileImageUrl = "https://example.com/profile.png",
-                    authorProfileImageDirectUrl = "https://example.com/profile-direct.png",
-                    title = "Title",
-                    content = "content",
-                    contentHtml = "<p>content</p>",
-                    version = 7L,
-                    published = true,
-                    listed = true,
-                    likesCount = 8,
-                    hitCount = 10,
-                ),
-            )
         val relatedSeed =
             responseFactory.buildRelatedAuthorEtagSeed(
                 authorId = 3L,
@@ -336,11 +312,6 @@ class PostPublicReadResponseFactoryTest {
         assertThat(cursorSeed).isEqualTo(
             "feed-cursor|size=10|sort=CREATED_AT|cursor=cursor-1|tag=backend|hasNext=true|nextCursor=next-1|" +
                 "items=1:1767225600000:11:13:content=7:Title 1,null,9:Summary 1,9:EXTRACTED:author=1:1,6:Author,6:author,31:https://example.com/profile.png",
-        )
-        assertThat(detailSeed).isEqualTo(
-            "9|1767398400000|7|8|10|content=5:Title,7:content,14:<p>content</p>,null,null,7:UNKNOWN,0:,4:NONE|" +
-                "author=1:1,6:Author,6:author," +
-                "31:https://example.com/profile.png,38:https://example.com/profile-direct.png",
         )
         assertThat(responseFactory.buildTagsEtagSeed(tags)).isEqualTo("Kotlin:3|Spring:2")
         assertThat(relatedSeed).isEqualTo(
@@ -415,13 +386,8 @@ class PostPublicReadResponseFactoryTest {
         val renamedPost = basePost.copy(authorName = "Renamed Author")
         val usernameChangedPost = basePost.copy(authorUsername = "renamed-author")
         val profileChangedPost = basePost.copy(authorProfileImgUrl = "https://example.com/profile-v2.png")
-        val baseDetail = detailPost()
-        val renamedDetail = baseDetail.copy(authorName = "Renamed Author")
-        val usernameChangedDetail = baseDetail.copy(authorUsername = "renamed-author")
-        val profileChangedDetail = baseDetail.copy(authorProfileImageUrl = "https://example.com/profile-v2.png")
 
         val baseFeedSeed = responseFactory.buildFeedPageEtagSeed("feed", 0, 10, PostSearchSortType1.CREATED_AT, data = pageOf(basePost))
-        val baseDetailSeed = responseFactory.buildPublicDetailEtagSeed(baseDetail)
 
         assertThat(responseFactory.buildFeedPageEtagSeed("feed", 0, 10, PostSearchSortType1.CREATED_AT, data = pageOf(renamedPost)))
             .isNotEqualTo(baseFeedSeed)
@@ -429,14 +395,10 @@ class PostPublicReadResponseFactoryTest {
             .isNotEqualTo(baseFeedSeed)
         assertThat(responseFactory.buildFeedPageEtagSeed("feed", 0, 10, PostSearchSortType1.CREATED_AT, data = pageOf(profileChangedPost)))
             .isNotEqualTo(baseFeedSeed)
-
-        assertThat(responseFactory.buildPublicDetailEtagSeed(renamedDetail)).isNotEqualTo(baseDetailSeed)
-        assertThat(responseFactory.buildPublicDetailEtagSeed(usernameChangedDetail)).isNotEqualTo(baseDetailSeed)
-        assertThat(responseFactory.buildPublicDetailEtagSeed(profileChangedDetail)).isNotEqualTo(baseDetailSeed)
     }
 
     @Test
-    @DisplayName("canonical summary와 공개 본문 필드 변경은 상세·feed ETag seed를 변경한다")
+    @DisplayName("canonical summary와 공개 목록 필드 변경은 feed ETag seed를 변경한다")
     fun buildEtagSeedsWithPublicContentFields() {
         val basePost = feedPost(id = 1L, modifiedAt = Instant.parse("2026-01-01T00:00:00Z"))
         val baseFeedSeed =
@@ -447,8 +409,6 @@ class PostPublicReadResponseFactoryTest {
                 PostSearchSortType1.CREATED_AT,
                 data = pageOf(basePost),
             )
-        val baseDetail = detailPost()
-        val baseDetailSeed = responseFactory.buildPublicDetailEtagSeed(baseDetail)
 
         val titleChangedFeed = basePost.copy(title = "Title v2")
         val summaryChangedFeed = basePost.copy(summary = "Summary v2")
@@ -480,10 +440,6 @@ class PostPublicReadResponseFactoryTest {
                 data = pageOf(summaryChangedFeed),
             ),
         ).isNotEqualTo(baseFeedSeed)
-        assertThat(responseFactory.buildPublicDetailEtagSeed(baseDetail.copy(title = "Title v2")))
-            .isNotEqualTo(baseDetailSeed)
-        assertThat(responseFactory.buildPublicDetailEtagSeed(baseDetail.copy(content = "content v2", summary = "Summary v2")))
-            .isNotEqualTo(baseDetailSeed)
         assertThat(
             responseFactory.buildFeedPageEtagSeed(
                 "feed",
@@ -493,76 +449,6 @@ class PostPublicReadResponseFactoryTest {
                 data = pageOf(basePost.copy(thumbnail = "")),
             ),
         ).isNotEqualTo(baseFeedSeed)
-        assertThat(
-            responseFactory.buildPublicDetailEtagSeed(baseDetail.copy(contentHtml = "")),
-        ).isNotEqualTo(baseDetailSeed)
-    }
-
-    @Test
-    @DisplayName("공개 상세 ETag seed는 contentHtml trust 표현 필드를 반영한다")
-    fun buildPublicDetailEtagSeedWithContentHtmlTrustFields() {
-        val trustedContent = HtmlContentSanitizer.sanitizeForPersistence("<p>safe</p>")
-        val trusted =
-            detailPost().copy(
-                contentHtml = trustedContent.contentHtml,
-                contentHtmlHash = trustedContent.contentHtmlHash,
-                contentHtmlSanitizerPolicyVersion = trustedContent.contentHtmlSanitizerPolicyVersion,
-                contentHtmlTrustState = trustedContent.contentHtmlTrustState,
-            )
-        val trustedSeed = responseFactory.buildPublicDetailEtagSeed(trusted)
-
-        assertThat(responseFactory.buildPublicDetailEtagSeed(trusted.copy(contentHtmlHash = "0".repeat(64))))
-            .isNotEqualTo(trustedSeed)
-        assertThat(
-            responseFactory.buildPublicDetailEtagSeed(
-                trusted.copy(contentHtmlSanitizerPolicyVersion = "outdated-policy"),
-            ),
-        ).isNotEqualTo(trustedSeed)
-        assertThat(
-            responseFactory.buildPublicDetailEtagSeed(
-                trusted.copy(contentHtmlTrustState = ContentHtmlTrustState.REJECTED),
-            ),
-        ).isNotEqualTo(trustedSeed)
-    }
-
-    @Test
-    @DisplayName("canonical summary 변경 후 이전 ETag 재검증은 304가 아닌 새 본문을 반환한다")
-    fun revalidationWithChangedCanonicalSummaryReturnsNewBody() {
-        val policy = PostPublicReadCachePolicies.DETAIL
-        val base = detailPost()
-        val oldResponse = MockHttpServletResponse()
-        responseFactory.respondWithEtag(
-            request = MockHttpServletRequest(),
-            response = oldResponse,
-            cachePolicy = policy,
-            surrogateKeys = setOf("post:9"),
-            etagSeed = responseFactory.buildPublicDetailEtagSeed(base),
-            startedAtNanos = System.nanoTime(),
-            body = base.summary,
-        )
-        val oldEtag = requireNotNull(oldResponse.getHeader(HttpHeaders.ETAG))
-
-        val revalidation =
-            MockHttpServletRequest().apply {
-                addHeader(HttpHeaders.IF_NONE_MATCH, oldEtag)
-            }
-        val newBody = "Summary v2"
-        val newResponse = MockHttpServletResponse()
-
-        val result =
-            responseFactory.respondWithEtag(
-                request = revalidation,
-                response = newResponse,
-                cachePolicy = policy,
-                surrogateKeys = setOf("post:9"),
-                etagSeed = responseFactory.buildPublicDetailEtagSeed(base.copy(summary = newBody)),
-                startedAtNanos = System.nanoTime(),
-                body = newBody,
-            )
-
-        assertThat(result.statusCode).isEqualTo(HttpStatus.OK)
-        assertThat(result.body).isEqualTo(newBody)
-        assertThat(newResponse.getHeader(HttpHeaders.ETAG)).isNotEqualTo(oldEtag)
     }
 
     @Test
@@ -636,25 +522,5 @@ class PostPublicReadResponseFactoryTest {
                     totalPages = 1,
                     numberOfElements = 1,
                 ),
-        )
-
-    private fun detailPost(): PostWithContentDto =
-        PostWithContentDto(
-            id = 9L,
-            createdAt = Instant.parse("2026-01-01T00:00:00Z"),
-            modifiedAt = Instant.parse("2026-01-03T00:00:00Z"),
-            authorId = 1L,
-            authorName = "Author",
-            authorUsername = "author",
-            authorProfileImageUrl = "https://example.com/profile.png",
-            authorProfileImageDirectUrl = "https://example.com/profile-direct.png",
-            title = "Title",
-            content = "content",
-            contentHtml = "<p>content</p>",
-            version = 7L,
-            published = true,
-            listed = true,
-            likesCount = 8,
-            hitCount = 10,
         )
 }
