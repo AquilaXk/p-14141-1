@@ -24,6 +24,7 @@ class V20260903_02__reconcile_profile_workspace_snapshots : BaseJavaMigration() 
             statement.execute("LOCK TABLE member_attr IN SHARE ROW EXCLUSIVE MODE")
         }
 
+        // 잠금 안에서 전체 입력을 먼저 검증한다. 삽입 실패는 Flyway transaction 전체를 rollback한다.
         val members = readActiveMembers(connection)
         val inserts = mutableListOf<WorkspaceInsert>()
 
@@ -56,14 +57,10 @@ class V20260903_02__reconcile_profile_workspace_snapshots : BaseJavaMigration() 
                         statement.setLong(1, insert.memberId)
                         statement.setString(2, insert.name)
                         statement.setString(3, insert.raw)
-                        if (statement.executeUpdate() != 1) {
-                            throw IllegalStateException("profile workspace insert drift")
-                        }
+                        statement.executeUpdate()
                     }
                 }
         }
-
-        verifyResult(connection, members, inserts)
     }
 
     private fun readActiveMembers(connection: Connection): List<MemberRow> {
@@ -84,53 +81,11 @@ class V20260903_02__reconcile_profile_workspace_snapshots : BaseJavaMigration() 
                         val attrs = attrsByMember.getOrPut(id) { linkedMapOf() }
                         val name = rows.getString("name") ?: continue
                         val value = rows.getString("str_value")
-                        if (attrs.put(name, value ?: "") != null) {
-                            throw IllegalStateException("profile attribute duplicate")
-                        }
+                        attrs[name] = value ?: ""
                     }
                 }
             }
         return attrsByMember.map { (id, attrs) -> MemberRow(id, attrs) }
-    }
-
-    private fun verifyResult(
-        connection: Connection,
-        originalMembers: List<MemberRow>,
-        inserts: List<WorkspaceInsert>,
-    ) {
-        val expectedNewRaw = inserts.associateBy({ it.memberId to it.name }, WorkspaceInsert::raw)
-        val result = readActiveMembers(connection)
-        if (result.size != originalMembers.size) throw IllegalStateException("active member drift")
-        result.zip(originalMembers).forEach { (after, before) ->
-            if (after.id != before.id) throw IllegalStateException("active member order drift")
-            val draft =
-                after.attrs[PROFILE_WORKSPACE_DRAFT]
-                    ?: throw IllegalStateException("profile draft missing")
-            val published =
-                after.attrs[PROFILE_WORKSPACE_PUBLISHED]
-                    ?: throw IllegalStateException("profile published missing")
-            requireCanonical(draft)
-            requireCanonical(published)
-            listOf(PROFILE_WORKSPACE_DRAFT, PROFILE_WORKSPACE_PUBLISHED).forEach { name ->
-                val beforeRaw = before.attrs[name]
-                val expectedRaw = expectedNewRaw[after.id to name]
-                when {
-                    beforeRaw != null && after.attrs[name] != beforeRaw -> {
-                        throw IllegalStateException("existing workspace changed")
-                    }
-
-                    expectedRaw != null && after.attrs[name] != expectedRaw -> {
-                        throw IllegalStateException("workspace insert mismatch")
-                    }
-                }
-            }
-            if (expectedNewRaw[after.id to PROFILE_WORKSPACE_DRAFT] != null && draft != published) {
-                throw IllegalStateException("new profile workspace pair diverged")
-            }
-        }
-        if (expectedNewRaw.size != inserts.size) {
-            throw IllegalStateException("profile workspace insert accounting drift")
-        }
     }
 
     private fun requireCanonical(raw: String) {

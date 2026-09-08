@@ -193,6 +193,27 @@ class ProfileWorkspaceSnapshotReconcileMigrationTestcontainersIntegrationTest {
     }
 
     @Test
+    fun `second insert failure rolls back the first workspace insert and preserves legacy rows`() {
+        postgres.createConnection("").use { connection ->
+            insertMembers(connection, 1L..1L)
+            insertLegacy(connection, 1, "rollback")
+            val before = attrs(connection, 1)
+            // 실제 DB가 published INSERT를 거절하게 해 Flyway transaction의 원자성을 검증한다.
+            connection.createStatement().use { statement ->
+                statement.execute(
+                    "ALTER TABLE member_attr ADD CONSTRAINT reject_published_fixture CHECK (name <> 'profileWorkspacePublished')",
+                )
+            }
+
+            assertFailsWith<FlywayException> { executeMigration() }
+
+            assertEquals(before, attrs(connection, 1))
+            assertEquals(0, workspaceCount(connection))
+            assertNull(rawWorkspace(connection, 1, "profileWorkspaceDraft"))
+        }
+    }
+
+    @Test
     fun `repeated execution is a no-op after all pairs become canonical`() {
         postgres.createConnection("").use { connection ->
             insertMembers(connection, 1L..2L)
