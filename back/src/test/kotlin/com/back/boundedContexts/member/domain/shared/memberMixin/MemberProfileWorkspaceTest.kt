@@ -2,6 +2,7 @@ package com.back.boundedContexts.member.domain.shared.memberMixin
 
 import com.back.boundedContexts.member.domain.shared.Member
 import com.back.boundedContexts.member.domain.shared.MemberAttr
+import com.back.boundedContexts.member.dto.MemberProfileWorkspaceContentDto
 import com.back.standard.util.Ut
 import org.assertj.core.api.Assertions.assertThat
 import org.assertj.core.api.Assertions.assertThatThrownBy
@@ -22,6 +23,50 @@ class MemberProfileWorkspaceTest {
 
         assertThat(draft.getProfileWorkspaceDraftContent()).isEqualTo(content)
         assertThat(published.getProfileWorkspacePublishedContent()).isEqualTo(content)
+    }
+
+    @Test
+    fun `populated canonical workspace preserves sections projects and links in stored and wire JSON`() {
+        val content =
+            MemberProfileWorkspaceContent(
+                aboutSections = listOf(MemberProfileAboutSectionBlock("notes", "Notes", listOf("Engineering"), true)),
+                aboutProjectSectionTitle = "Projects",
+                aboutProjects =
+                    listOf(
+                        MemberProfileAboutProjectBlock(
+                            "blog",
+                            "Aquila Blog",
+                            "Technical notes",
+                            "Maintainer",
+                            "https://example.com/blog",
+                            "Read",
+                        ),
+                    ),
+                serviceLinks = listOf(MemberProfileLinkItem("github", "Source", "https://example.com/source")),
+                contactLinks = listOf(MemberProfileLinkItem("mail", "Contact", "mailto:owner@example.com")),
+            )
+        val stored = encodeMemberProfileWorkspaceContent(content)
+        val decoded = decodeMemberProfileWorkspaceContent(stored)
+        assertThat(decoded).isEqualTo(content)
+        val mapper = jacksonObjectMapper()
+        val wire = mapper.readTree(mapper.writeValueAsString(MemberProfileWorkspaceContentDto(requireNotNull(decoded))))
+
+        // 응답 DTO가 비어 있지 않은 정본 컬렉션의 필드를 빠뜨리지 않는지 검증한다.
+        assertThat(wire.path("aboutSections")).isEqualTo(
+            mapper.readTree("""[{"id":"notes","title":"Notes","items":["Engineering"],"dividerBefore":true}]"""),
+        )
+        assertThat(wire.path("aboutProjectSectionTitle").asText()).isEqualTo("Projects")
+        assertThat(wire.path("aboutProjects")).isEqualTo(
+            mapper.readTree(
+                """[{"id":"blog","name":"Aquila Blog","summary":"Technical notes","role":"Maintainer","href":"https://example.com/blog","linkLabel":"Read"}]""",
+            ),
+        )
+        assertThat(wire.path("serviceLinks")).isEqualTo(
+            mapper.readTree("""[{"icon":"github","label":"Source","href":"https://example.com/source"}]"""),
+        )
+        assertThat(wire.path("contactLinks")).isEqualTo(
+            mapper.readTree("""[{"icon":"mail","label":"Contact","href":"mailto:owner@example.com"}]"""),
+        )
     }
 
     @Test

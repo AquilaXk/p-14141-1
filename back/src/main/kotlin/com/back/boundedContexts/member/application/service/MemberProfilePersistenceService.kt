@@ -17,7 +17,7 @@ class MemberProfilePersistenceService(
 ) {
     fun initializeWorkspaceSnapshots(
         member: Member,
-        content: MemberProfileWorkspaceContent = MemberProfileWorkspaceContent(),
+        content: MemberProfileWorkspaceContent,
     ): ProfileImageSyncRequest? {
         val normalized = normalizeMemberProfileWorkspaceContent(content)
         member.setProfileWorkspaceDraftContent(normalized)
