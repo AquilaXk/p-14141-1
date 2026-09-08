@@ -1,5 +1,6 @@
 package com.back.boundedContexts.post.application.service
 
+import com.back.boundedContexts.member.application.port.output.MemberRepositoryPort
 import com.back.boundedContexts.member.domain.shared.Member
 import com.back.boundedContexts.member.domain.shared.memberMixin.MemberProfileWorkspaceContent
 import com.back.boundedContexts.post.application.port.output.MemberAttrRepositoryPort
@@ -12,8 +13,11 @@ import com.back.boundedContexts.post.application.port.output.SecureTipPort
 import com.back.boundedContexts.post.domain.POSTS_COUNT
 import com.back.boundedContexts.post.domain.Post
 import com.back.boundedContexts.post.dto.AdmDeletedPostSnapshotDto
+import com.back.boundedContexts.post.model.PostSummaryMode
 import com.back.global.app.AppConfig
 import com.back.global.event.application.EventPublisher
+import com.back.global.exception.application.AppException
+import com.back.global.exception.application.ErrorCode
 import com.back.global.storage.application.UploadedFileRetentionService
 import com.back.global.task.annotation.TaskPayloadSensitivity
 import com.back.global.task.application.TaskFacade
@@ -28,14 +32,18 @@ import com.back.global.task.application.port.output.TaskQueueInsertResult
 import com.back.global.task.application.port.output.TaskQueueRepositoryPort
 import com.back.global.task.domain.Task
 import com.back.global.task.domain.TaskStatus
+import com.back.standard.util.Ut
 import org.assertj.core.api.Assertions.assertThat
+import org.assertj.core.api.Assertions.assertThatThrownBy
 import org.junit.jupiter.api.Assertions.assertDoesNotThrow
 import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.params.ParameterizedTest
 import org.junit.jupiter.params.provider.CsvSource
+import org.mockito.ArgumentMatchers
 import org.mockito.BDDMockito.given
 import org.mockito.BDDMockito.then
+import org.mockito.Mockito.inOrder
 import org.mockito.Mockito.mock
 import org.mockito.Mockito.verifyNoInteractions
 import org.springframework.cache.CacheManager
@@ -66,6 +74,7 @@ class PostApplicationServiceDeleteResilienceTest {
     private val postTagIndexRepository: PostTagIndexRepositoryPort = mock(PostTagIndexRepositoryPort::class.java)
     private val postWriteRequestIdempotencyRepository: PostWriteRequestIdempotencyRepositoryPort =
         mock(PostWriteRequestIdempotencyRepositoryPort::class.java)
+    private val memberRepository: MemberRepositoryPort = mock(MemberRepositoryPort::class.java)
     private val secureTipPort: SecureTipPort = mock(SecureTipPort::class.java)
     private val eventPublisher: EventPublisher = mock(EventPublisher::class.java)
     private val uploadedFileRetentionService: UploadedFileRetentionService = mock(UploadedFileRetentionService::class.java)
@@ -76,7 +85,7 @@ class PostApplicationServiceDeleteResilienceTest {
         mock(PostRecommendFeatureStoreService::class.java)
     private val postKeywordSearchPipelineService: PostKeywordSearchPipelineService =
         mock(PostKeywordSearchPipelineService::class.java)
-    private val objectMapper = jacksonObjectMapper()
+    private val objectMapper = jacksonObjectMapper().also { Ut.JSON.objectMapper = it }
     private val postReadCacheInvalidator = PostReadCacheInvalidator(cacheManager)
     private val postWriteSideEffectHandler =
         PostWriteSideEffectHandler(
@@ -114,6 +123,7 @@ class PostApplicationServiceDeleteResilienceTest {
         PostApplicationService(
             postRepository = postRepository,
             postWriteRequestIdempotencyRepository = postWriteRequestIdempotencyRepository,
+            memberRepository = memberRepository,
             secureTipPort = secureTipPort,
             uploadedFileRetentionService = uploadedFileRetentionService,
             postRecommendRankingService = postRecommendRankingService,
@@ -126,6 +136,114 @@ class PostApplicationServiceDeleteResilienceTest {
             postTempDraftService = postTempDraftService,
             postHitSideEffectQueue = postHitSideEffectQueue,
         )
+
+    @Test
+    @DisplayName("멱등 글 작성은 replay slot 조회 전에 작성자 행을 잠근다")
+    fun lockActorBeforeLookingUpIdempotencyReplaySlot() {
+        // given
+        val author = member(1, "요청 작성자")
+        val lockedAuthor = member(1, "잠긴 작성자")
+        val replayedPost = Post(id = 101, author = lockedAuthor, title = "기존 글", content = "본문")
+        val requestSlot =
+            com.back.boundedContexts.post.domain.PostWriteRequestIdempotency(
+                actor = lockedAuthor,
+                requestKey = "write-001",
+                postId = replayedPost.id,
+            )
+        given(memberRepository.findByIdForUpdate(author.id)).willReturn(Optional.of(lockedAuthor))
+        given(postWriteRequestIdempotencyRepository.findByActorAndRequestKey(lockedAuthor, "write-001"))
+            .willReturn(requestSlot)
+        given(postRepository.findById(replayedPost.id)).willReturn(Optional.of(replayedPost))
+
+        // when
+        val result =
+            service.write(
+                author = author,
+                title = "재시도 글",
+                content = "재시도 본문",
+                idempotencyKey = "write-001",
+                summaryMode = PostSummaryMode.AUTO,
+            )
+
+        // then
+        assertThat(result).isSameAs(replayedPost)
+        inOrder(memberRepository, postWriteRequestIdempotencyRepository).apply {
+            verify(memberRepository).findByIdForUpdate(author.id)
+            verify(postWriteRequestIdempotencyRepository).findByActorAndRequestKey(lockedAuthor, "write-001")
+        }
+    }
+
+    @Test
+    @DisplayName("멱등 글 작성은 없는 작성자를 slot 조회 전에 NOT_FOUND로 중단한다")
+    fun stopBeforeSlotLookupWhenIdempotencyActorIsMissing() {
+        // given
+        val author = member(2, "사라진 작성자")
+        given(memberRepository.findByIdForUpdate(author.id)).willReturn(Optional.empty())
+
+        // when & then
+        assertThatThrownBy {
+            service.write(
+                author = author,
+                title = "실패 글",
+                content = "실패 본문",
+                idempotencyKey = "write-002",
+                summaryMode = PostSummaryMode.AUTO,
+            )
+        }.isInstanceOf(AppException::class.java)
+            .extracting("errorCode")
+            .isEqualTo(ErrorCode.NOT_FOUND)
+
+        verifyNoInteractions(postWriteRequestIdempotencyRepository)
+    }
+
+    @Test
+    @DisplayName("키 없는 글 작성은 작성자 잠금을 획득하지 않는다")
+    fun doNotLockActorForUnkeyedWrite() {
+        // given
+        val author = member(3, "일반 작성자")
+        val savedPost =
+            Post(id = 102, author = author, title = "일반 글", content = "일반 본문").apply {
+                createdAt = Instant.now()
+                modifiedAt = createdAt
+            }
+        given(postRepository.saveAndFlush(anyPost())).willReturn(savedPost)
+
+        // when
+        service.write(
+            author = author,
+            title = "일반 글",
+            content = "일반 본문",
+            summaryMode = PostSummaryMode.AUTO,
+        )
+
+        // then
+        verifyNoInteractions(memberRepository)
+    }
+
+    private fun member(
+        id: Long,
+        nickname: String,
+    ): Member =
+        Member(
+            id = id,
+            username = "member-$id",
+            password = null,
+            nickname = nickname,
+            email = "member-$id@test.com",
+            apiKey = "member-$id-api-key",
+        ).also {
+            it.createdAt = Instant.now()
+            it.modifiedAt = it.createdAt
+            it.setProfileWorkspacePublishedContent(MemberProfileWorkspaceContent())
+        }
+
+    private fun anyPost(): Post =
+        ArgumentMatchers.any(Post::class.java)
+            ?: Post(
+                author = Member(id = 0, username = "dummy", nickname = "dummy", apiKey = "dummy"),
+                title = "dummy",
+                content = "dummy",
+            )
 
     @Test
     @DisplayName("delete는 member posts 카운터 보정 실패가 나도 soft delete를 완료한다")

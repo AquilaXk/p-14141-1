@@ -1,5 +1,6 @@
 package com.back.boundedContexts.post.application.service
 
+import com.back.boundedContexts.member.application.port.output.MemberRepositoryPort
 import com.back.boundedContexts.member.domain.shared.Member
 import com.back.boundedContexts.member.dto.MemberDto
 import com.back.boundedContexts.post.application.port.output.PostRepositoryPort
@@ -24,7 +25,6 @@ import com.back.standard.dto.EventPayload
 import com.back.standard.dto.page.PagedResult
 import com.back.standard.dto.post.type1.PostSearchSortType1
 import org.slf4j.LoggerFactory
-import org.springframework.dao.DataIntegrityViolationException
 import org.springframework.orm.ObjectOptimisticLockingFailureException
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
@@ -37,6 +37,7 @@ import kotlin.jvm.optionals.getOrNull
 class PostApplicationService(
     private val postRepository: PostRepositoryPort,
     private val postWriteRequestIdempotencyRepository: PostWriteRequestIdempotencyRepositoryPort,
+    private val memberRepository: MemberRepositoryPort,
     private val secureTipPort: SecureTipPort,
     private val uploadedFileRetentionService: UploadedFileRetentionService,
     private val postRecommendRankingService: PostRecommendRankingService,
@@ -115,9 +116,15 @@ class PostApplicationService(
             return created
         }
 
+        // 같은 작성자의 keyed 요청은 slot 조회 전에 작성자 행을 직렬화한다.
+        val lockedAuthor =
+            memberRepository
+                .findByIdForUpdate(persistenceAuthor.id)
+                .orElseThrow { AppException(ErrorCode.NOT_FOUND, "회원을 찾을 수 없습니다.") }
+
         val existingRequest =
             postWriteRequestIdempotencyRepository.findByActorAndRequestKey(
-                persistenceAuthor,
+                lockedAuthor,
                 normalizedIdempotencyKey,
             )
 
@@ -126,17 +133,12 @@ class PostApplicationService(
                 ?: throw AppException(ErrorCode.POST_CONCURRENT_EDIT, "이전 작성 요청 결과를 확인할 수 없습니다. 다시 시도해주세요.")
         }
 
-        val requestSlot = existingRequest ?: createIdempotencyRequestSlot(persistenceAuthor, normalizedIdempotencyKey)
-
-        if (requestSlot.postId != null) {
-            return findById(requestSlot.postId!!)
-                ?: throw AppException(ErrorCode.POST_CONCURRENT_EDIT, "이전 작성 요청 결과를 확인할 수 없습니다. 다시 시도해주세요.")
-        }
+        val requestSlot = existingRequest ?: createIdempotencyRequestSlot(lockedAuthor, normalizedIdempotencyKey)
 
         val createdPost =
             writeNewPost(
-                author = author,
-                persistenceAuthor = persistenceAuthor,
+                author = lockedAuthor,
+                persistenceAuthor = lockedAuthor,
                 title = title,
                 content = content,
                 published = published,
@@ -425,27 +427,13 @@ class PostApplicationService(
     private fun createIdempotencyRequestSlot(
         persistenceAuthor: Member,
         idempotencyKey: String,
-    ): PostWriteRequestIdempotency {
-        try {
-            return postWriteRequestIdempotencyRepository.saveAndFlush(
-                PostWriteRequestIdempotency(
-                    actor = persistenceAuthor,
-                    requestKey = idempotencyKey,
-                ),
-            )
-        } catch (exception: DataIntegrityViolationException) {
-            val concurrentRequest =
-                postWriteRequestIdempotencyRepository.findByActorAndRequestKey(
-                    persistenceAuthor,
-                    idempotencyKey,
-                ) ?: throw exception
-
-            if (concurrentRequest.postId != null) {
-                return concurrentRequest
-            }
-            throw AppException(ErrorCode.POST_CONCURRENT_EDIT, "동일한 글 작성 요청이 처리 중입니다. 잠시 후 다시 시도해주세요.")
-        }
-    }
+    ): PostWriteRequestIdempotency =
+        postWriteRequestIdempotencyRepository.saveAndFlush(
+            PostWriteRequestIdempotency(
+                actor = persistenceAuthor,
+                requestKey = idempotencyKey,
+            ),
+        )
 
     @Transactional
     fun delete(

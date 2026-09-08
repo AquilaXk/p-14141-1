@@ -2,6 +2,8 @@ package com.back.boundedContexts.post.application.service
 
 import com.back.boundedContexts.member.application.service.ActorApplicationService
 import com.back.boundedContexts.member.domain.shared.Member
+import com.back.boundedContexts.post.adapter.persistence.PostRepository
+import com.back.boundedContexts.post.adapter.persistence.PostWriteRequestIdempotencyRepository
 import com.back.boundedContexts.post.application.port.output.PostAttrRepositoryPort
 import com.back.boundedContexts.post.domain.Post
 import com.back.boundedContexts.post.domain.postMixin.HIT_COUNT
@@ -24,9 +26,14 @@ import org.mockito.Mockito.doThrow
 import org.mockito.Mockito.mockingDetails
 import org.mockito.Mockito.verifyNoInteractions
 import org.springframework.beans.factory.annotation.Autowired
+import org.springframework.transaction.PlatformTransactionManager
+import org.springframework.transaction.TransactionDefinition
 import org.springframework.transaction.support.TransactionSynchronizationManager
 import org.springframework.transaction.support.TransactionTemplate
 import tools.jackson.databind.ObjectMapper
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.Executors
+import java.util.concurrent.TimeUnit
 
 @DisplayName("PostApplicationService 후속 작업 AFTER_COMMIT 테스트")
 class PostApplicationServiceAfterCommitTest : BasePostApplicationServiceAfterCommitIntegrationTest() {
@@ -40,6 +47,12 @@ class PostApplicationServiceAfterCommitTest : BasePostApplicationServiceAfterCom
     private lateinit var postAttrRepository: PostAttrRepositoryPort
 
     @Autowired
+    private lateinit var postRepository: PostRepository
+
+    @Autowired
+    private lateinit var postWriteRequestIdempotencyRepository: PostWriteRequestIdempotencyRepository
+
+    @Autowired
     private lateinit var taskRepository: TaskRepository
 
     @Autowired
@@ -50,6 +63,69 @@ class PostApplicationServiceAfterCommitTest : BasePostApplicationServiceAfterCom
 
     @Autowired
     private lateinit var transactionTemplate: TransactionTemplate
+
+    @Autowired
+    private lateinit var transactionManager: PlatformTransactionManager
+
+    @Test
+    @DisplayName("동일 작성자와 멱등 키의 동시 글 작성은 하나의 글·slot·후속 작업만 남긴다")
+    fun concurrentIdempotentWritesPersistOnePostSlotAndTask() {
+        // given
+        val author = actorApplicationService.findByEmail("admin@test.com")!!
+        val requestKey = "concurrent-write-${System.nanoTime()}"
+        val postsBefore = postRepository.countByAuthor(author)
+        val totalPostsBefore = postRepository.count()
+        val previousTaskIds = taskRepository.findAll().map { it.id }.toSet()
+        val ready = CountDownLatch(2)
+        val start = CountDownLatch(1)
+        val requiredTransactionTemplate =
+            TransactionTemplate(transactionManager).apply {
+                propagationBehavior = TransactionDefinition.PROPAGATION_REQUIRED
+            }
+        val executor = Executors.newFixedThreadPool(2)
+
+        val results =
+            try {
+                val futures =
+                    List(2) {
+                        executor.submit<ConcurrentWriteResult> {
+                            ready.countDown()
+                            check(start.await(10, TimeUnit.SECONDS)) { "concurrent idempotent write start timed out" }
+                            requireNotNull(
+                                requiredTransactionTemplate.execute {
+                                    val post =
+                                        postApplicationService.write(
+                                            author = author,
+                                            title = "concurrent idempotent source",
+                                            content = "concurrent idempotent content",
+                                            idempotencyKey = requestKey,
+                                            summaryMode = PostSummaryMode.AUTO,
+                                        )
+                                    // 재시도 요청도 같은 REQUIRED 트랜잭션 안에서 계속 조회할 수 있어야 한다.
+                                    ConcurrentWriteResult(post.id, postApplicationService.count())
+                                },
+                            )
+                        }
+                    }
+
+                assertThat(ready.await(10, TimeUnit.SECONDS)).isTrue()
+                start.countDown()
+                futures.map { it.get(20, TimeUnit.SECONDS) }
+            } finally {
+                start.countDown()
+                executor.shutdownNow()
+                assertThat(executor.awaitTermination(10, TimeUnit.SECONDS)).isTrue()
+            }
+
+        // then
+        assertThat(results.map { it.postId }.distinct()).hasSize(1)
+        assertThat(results.map { it.postCountAfterWrite }).containsOnly(totalPostsBefore + 1)
+        assertThat(postRepository.countByAuthor(author)).isEqualTo(postsBefore + 1)
+        val requestSlot = postWriteRequestIdempotencyRepository.findByActorAndRequestKey(author, requestKey)
+        assertThat(requestSlot).isNotNull()
+        assertThat(requestSlot!!.postId).isEqualTo(results.first().postId)
+        assertThat(postWriteSideEffectTasksSince(previousTaskIds)).hasSize(1)
+    }
 
     @Test
     @DisplayName("글 작성 트랜잭션이 rollback되면 첨부파일·추천 후속 작업을 실행하지 않는다")
@@ -477,5 +553,10 @@ class PostApplicationServiceAfterCommitTest : BasePostApplicationServiceAfterCom
     private data class PostCounterSnapshot(
         val hitCount: Int,
         val likesCount: Int,
+    )
+
+    private data class ConcurrentWriteResult(
+        val postId: Long,
+        val postCountAfterWrite: Long,
     )
 }
