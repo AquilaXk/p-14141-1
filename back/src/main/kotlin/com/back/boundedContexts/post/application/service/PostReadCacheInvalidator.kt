@@ -213,13 +213,14 @@ class PostReadCacheInvalidator(
                     )
                     recordCacheEvict(PostQueryCacheNames.BOOTSTRAP, "key", evictReason)
                 }
-                if (includeSearchFirstPage) {
-                    searchCache?.evict("page=1:size=$pageSize:sort=$sortName:kw=_")
-                    recordCacheEvict(PostQueryCacheNames.SEARCH, "key", evictReason)
-                    searchNegativeCache?.evict("page=1:size=$pageSize:sort=$sortName:kw=_")
-                    recordCacheEvict(PostQueryCacheNames.SEARCH_NEGATIVE, "key", evictReason)
-                }
             }
+        }
+        if (includeSearchFirstPage) {
+            // 검색어별 키는 열거할 수 없으므로 결과와 결과 없음 캐시를 함께 비운다.
+            searchCache?.clear()
+            recordCacheEvict(PostQueryCacheNames.SEARCH, "all", evictReason)
+            searchNegativeCache?.clear()
+            recordCacheEvict(PostQueryCacheNames.SEARCH_NEGATIVE, "all", evictReason)
         }
     }
 

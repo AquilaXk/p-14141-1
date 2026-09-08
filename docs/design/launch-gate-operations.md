@@ -92,9 +92,19 @@ Merge 전 PR 본문 또는 review note에는 다음 항목을 남긴다.
 
 ## Backend CI Gate Paths
 
-- PR path: `.github/workflows/backend-ci.yml` → reusable backend quality가 `./gradlew ciFastCheck`만 실행한다. 속도용 의도적 fast path이며, PR green만으로 merge 완료/출시 가능으로 취급하지 않는다.
-- main/release path: `.github/workflows/ci.yml`(push to `main`) → 같은 reusable job이 `./gradlew check`를 실행한다. `check`는 `testcontainersTest`를 포함하며 main trunk required gate다.
-- PR에서 잡지 못한 Testcontainers 회귀는 main CI 실패로 차단한다. drill 실패나 main full check 실패를 무시하고 배포를 계속하는 우회는 금지다.
+- Run PR checks through `.github/workflows/ci.yml`. The reusable backend job runs
+  `./gradlew ciFastCheck`, while `Platform Standalone` runs `./gradlew check`
+  against the exact archived source, including `testcontainersTest` and the
+  combined 100% line-coverage gate after the existing reviewed exclusions.
+- Run the full `check` through the reusable backend job on main pushes as well.
+  A passing fast check does not replace the standalone or main checks.
+- Keep fast coverage reports informational. Apply the 100% threshold to the
+  combined unit and PostgreSQL test evidence in the required full check, not to
+  the incomplete fast-test subset. Keep the baseline exclusion lock in both paths.
+- Preserve `jacocoTestReport.xml` in the standalone artifact when generated,
+  including on failure. Keep the failed gate exit status and temporary cleanup.
+- Stop delivery when the required full checks or restore drill fail; do not
+  treat a fast-check result as release approval.
 
 ## Backup Restore Drill Evidence
 
@@ -116,7 +126,8 @@ Before merge:
 - [ ] #958 또는 관련 launch gate issue가 PR에 연결되어 있다.
 - [ ] P0/P1 launch-blocking issue 상태를 확인했다.
 - [ ] CI, CodeQL, backend dependency-check run/artifact evidence를 확인했다. dependency-check skip이면 block 또는 명시적 defer note를 기록했다.
-- [ ] PR backend green이 `ciFastCheck` fast path임을 인지하고, Testcontainers full 검증은 merge 후 main `check` gate에 의존함을 기록했다.
+- [ ] Confirm both PR fast-check evidence and the standalone full check, including
+  Testcontainers and combined coverage; keep the main full check after merge.
 - [ ] CodeRabbit review 또는 Codex CLI fallback review가 PR review로 남아 있다.
 - [ ] unresolved review thread와 requested changes가 없다.
 - [ ] 배포 영향 범위를 `docs-only`, `frontend`, `backend`, `deploy` 중 하나로 기록했다.

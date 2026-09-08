@@ -75,10 +75,11 @@ object PostPublicReadCachePolicies {
         )
     val DETAIL =
         PublicReadCachePolicy(
-            name = "detail-max20-smax60-swr60",
-            maxAgeSeconds = 20,
-            sharedMaxAgeSeconds = 60,
-            staleWhileRevalidateSeconds = 60,
+            name = "detail-no-store",
+            maxAgeSeconds = 0,
+            sharedMaxAgeSeconds = 0,
+            staleWhileRevalidateSeconds = 0,
+            noStore = true,
         )
     val RELATED_AUTHOR =
         PublicReadCachePolicy(

@@ -9,6 +9,8 @@ interface PostRepository :
     PostRepositoryCustom {
     fun countByAuthor(author: Member): Long
 
+    fun existsByIdAndPublishedTrue(id: Long): Boolean
+
     fun existsByAuthorAndTitle(
         author: Member,
         title: String,
@@ -22,9 +24,4 @@ interface PostRepository :
     fun existsByContentContaining(contentFragment: String): Boolean
 
     fun findFirstByOrderByIdDesc(): Post?
-
-    fun findFirstByAuthorAndTitleAndPublishedFalseOrderByIdAsc(
-        author: Member,
-        title: String,
-    ): Post?
 }

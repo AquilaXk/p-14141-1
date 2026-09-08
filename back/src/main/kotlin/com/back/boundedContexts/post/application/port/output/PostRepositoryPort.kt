@@ -73,11 +73,6 @@ interface PostRepositoryPort {
 
     fun findFirstByOrderByIdDesc(): Post?
 
-    fun findFirstByAuthorAndTitleAndPublishedFalseOrderByIdAsc(
-        author: Member,
-        title: String,
-    ): Post?
-
     fun existsByAuthorAndTitle(
         author: Member,
         title: String,
@@ -111,6 +106,8 @@ interface PostRepositoryPort {
     fun findPublicByAuthorExceptPost(query: RelatedAuthorQuery): List<Post>
 
     fun findPublicDetailById(id: Long): Post?
+
+    fun isPublicDetailReadable(id: Long): Boolean
 
     fun findPublicDetailContentById(id: Long): PublicPostDetailContentCacheDto?
 

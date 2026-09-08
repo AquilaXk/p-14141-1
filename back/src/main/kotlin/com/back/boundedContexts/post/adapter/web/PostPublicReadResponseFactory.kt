@@ -2,7 +2,6 @@ package com.back.boundedContexts.post.adapter.web
 
 import com.back.boundedContexts.post.dto.CursorFeedPageDto
 import com.back.boundedContexts.post.dto.FeedPostDto
-import com.back.boundedContexts.post.dto.PostWithContentDto
 import com.back.boundedContexts.post.dto.PublicPostsBootstrapDto
 import com.back.boundedContexts.post.dto.TagCountDto
 import com.back.standard.dto.page.PageDto
@@ -101,8 +100,6 @@ class PostPublicReadResponseFactory(
             tag = tag,
             data = data,
         )
-
-    fun buildPublicDetailEtagSeed(data: PostWithContentDto): String = etagSeedBuilder.buildPublicDetailEtagSeed(data)
 
     fun buildTagsEtagSeed(tags: List<TagCountDto>): String = etagSeedBuilder.buildTagsEtagSeed(tags)
 

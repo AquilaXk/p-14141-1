@@ -48,6 +48,8 @@ class PostUseCaseAdapter(
 
     override fun findPublicDetailById(id: Long): Post? = postApplicationService.findPublicDetailById(id)
 
+    override fun isPublicDetailReadable(id: Long): Boolean = postApplicationService.isPublicDetailReadable(id)
+
     override fun findPublicDetailContentById(id: Long): PublicPostDetailContentCacheDto? =
         postApplicationService.findPublicDetailContentById(id)
 

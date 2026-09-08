@@ -1,7 +1,13 @@
 package com.back.infrastructure
 
+import com.back.boundedContexts.post.application.service.PostAttachmentObjectKeySnapshot
+import com.back.boundedContexts.post.application.service.PostRecommendationSideEffect
+import com.back.boundedContexts.post.application.service.PostWriteSideEffectPayload
 import com.back.global.system.adapter.persistence.AdminOperationReceiptRepository
 import com.back.global.task.adapter.persistence.TaskRepository
+import com.back.global.task.annotation.TaskPayloadSensitivity
+import com.back.global.task.application.TaskHandlerRegistry
+import com.back.global.task.application.TaskPayloadEnvelope
 import org.flywaydb.core.Flyway
 import org.junit.jupiter.api.Test
 import org.springframework.data.jpa.repository.Query
@@ -9,8 +15,10 @@ import org.testcontainers.containers.PostgreSQLContainer
 import org.testcontainers.junit.jupiter.Container
 import org.testcontainers.junit.jupiter.Testcontainers
 import org.testcontainers.utility.DockerImageName
+import tools.jackson.module.kotlin.jacksonObjectMapper
 import java.sql.Connection
 import java.sql.Types
+import java.time.Instant
 import java.util.UUID
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.Executors
@@ -153,6 +161,32 @@ class AdminOperationReceiptTestcontainersIntegrationTest {
         connection: Connection,
         taskUid: UUID,
     ) {
+        val objectMapper = jacksonObjectMapper()
+        val payload =
+            PostWriteSideEffectPayload(
+                uid = taskUid,
+                aggregateType = "Post",
+                aggregateId = 1L,
+                postId = 1L,
+                attachmentKeys = PostAttachmentObjectKeySnapshot.fromContents(null, null, null),
+                beforeTags = emptyList(),
+                afterTags = emptyList(),
+                cacheInvalidationTargets = emptySet(),
+                evictReason = "receipt-concurrency-test",
+                recommendationAction = PostRecommendationSideEffect.NONE,
+                domainEventType = null,
+                domainEventJson = null,
+            )
+        val envelope =
+            TaskPayloadEnvelope(
+                schemaVersion = TaskHandlerRegistry.CURRENT_TASK_PAYLOAD_SCHEMA_VERSION,
+                taskType = PostWriteSideEffectPayload.TASK_TYPE,
+                sensitivity = TaskPayloadSensitivity.PERSONAL,
+                createdAtEpochMs = Instant.now().toEpochMilli(),
+                expiresAtEpochMs = null,
+                payloadJson = objectMapper.writeValueAsString(payload),
+            )
+        // 저장 제약을 우회하지 않고 현행 payload로 접수·잠금 경쟁만 검증한다.
         connection
             .prepareStatement(
                 """
@@ -160,12 +194,14 @@ class AdminOperationReceiptTestcontainersIntegrationTest {
                     uid, aggregate_type, aggregate_id, task_type, payload, status,
                     retry_count, max_retries, next_retry_at, created_at, modified_at
                 ) VALUES (
-                    ?, 'Post', 1, 'post.write.side-effect', '{}', 'FAILED', 1, 3,
+                    ?, 'Post', 1, ?, ?, 'FAILED', 1, 3,
                     CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
                 )
                 """.trimIndent(),
             ).use { statement ->
                 statement.setObject(1, taskUid)
+                statement.setString(2, envelope.taskType)
+                statement.setString(3, objectMapper.writeValueAsString(envelope))
                 assertEquals(1, statement.executeUpdate())
             }
     }

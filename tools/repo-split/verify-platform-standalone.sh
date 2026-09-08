@@ -32,7 +32,14 @@ platform_root="${work_dir}/archive"
 log_file="${artifact_dir}/platform-standalone.log"
 
 cleanup() {
-  rm -rf "${work_dir}"
+  local status=$?
+  local coverage_report="${platform_root}/back/build/reports/jacoco/test/jacocoTestReport.xml"
+  # 실패한 검사도 미커버 줄을 추적할 수 있도록 임시 archive 삭제 전에 보존한다.
+  if [[ -f "${coverage_report}" ]]; then
+    cp "${coverage_report}" "${artifact_dir}/jacocoTestReport.xml" || status=1
+  fi
+  rm -rf "${work_dir}" || status=1
+  return "${status}"
 }
 trap cleanup EXIT
 

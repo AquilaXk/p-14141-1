@@ -250,6 +250,10 @@ class PostPublicReadQueryService(
     override fun getPublicPostDetail(id: Long): PostWithContentDto =
         runReadQuery("detail", "id=$id") {
             postReadBulkheadService.withDetailPermit {
+                // 캐시의 과거 공개 상태가 현재 접근 권한을 대신하지 않도록 먼저 확인한다.
+                if (!postUseCase.isPublicDetailReadable(id)) {
+                    throw AppException(ErrorCode.NOT_FOUND, "존재하지 않는 글입니다.")
+                }
                 if (isDetailNegativeCached(id)) {
                     throw AppException(ErrorCode.NOT_FOUND, "존재하지 않는 글입니다.")
                 }

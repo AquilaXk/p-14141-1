@@ -1,14 +1,17 @@
 package com.back.boundedContexts.post.dto
 
 import com.back.boundedContexts.member.domain.shared.Member
+import com.back.boundedContexts.member.domain.shared.memberMixin.MemberProfileWorkspaceContent
 import com.back.boundedContexts.post.domain.Post
 import com.back.boundedContexts.post.model.PostSummarySource
 import com.back.global.app.AppConfig
+import com.back.standard.util.Ut
 import org.assertj.core.api.Assertions.assertThat
 import org.assertj.core.api.Assertions.assertThatThrownBy
 import org.junit.jupiter.api.BeforeAll
 import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Test
+import tools.jackson.module.kotlin.jacksonObjectMapper
 import java.time.Instant
 
 @DisplayName("게시글 작성자 DTO 매핑")
@@ -17,6 +20,7 @@ class PostAuthorDtoMappingTest {
         @JvmStatic
         @BeforeAll
         fun initAppConfig() {
+            Ut.JSON.objectMapper = jacksonObjectMapper()
             AppConfig(
                 siteBackUrl = "https://api.example.com",
                 siteFrontUrl = "https://example.com",
@@ -130,6 +134,7 @@ class PostAuthorDtoMappingTest {
             ).apply {
                 createdAt = Instant.parse("2026-01-01T00:00:00Z")
                 modifiedAt = Instant.parse("2026-01-01T00:01:00Z")
+                setProfileWorkspacePublishedContent(MemberProfileWorkspaceContent())
             }
         return Post(
             id = 10L,
