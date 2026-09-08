@@ -593,10 +593,11 @@ class PostPublicReadResponseFactoryTest {
             "search-high-entropy-no-store",
             "tags-max60-smax300-swr300",
             "bootstrap-max20-smax60-swr60",
-            "detail-max20-smax60-swr60",
+            "detail-no-store",
             "related-author-max15-smax45-swr45",
         )
         assertThat(PostPublicReadCachePolicies.SEARCH_NO_STORE.noStore).isTrue()
+        assertThat(PostPublicReadCachePolicies.DETAIL.noStore).isTrue()
         assertThat(PostPublicReadCachePolicies.RELATED_AUTHOR.sharedMaxAgeSeconds).isEqualTo(45)
     }
 

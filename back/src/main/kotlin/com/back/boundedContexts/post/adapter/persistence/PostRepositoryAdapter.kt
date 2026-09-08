@@ -106,6 +106,8 @@ class PostRepositoryAdapter(
 
     override fun findPublicDetailById(id: Long): Post? = postRepository.findPublicDetailById(id)
 
+    override fun isPublicDetailReadable(id: Long): Boolean = postRepository.existsByIdAndPublishedTrue(id)
+
     override fun findPublicDetailContentById(id: Long): PublicPostDetailContentCacheDto? = postRepository.findPublicDetailContentById(id)
 
     override fun findAllPublicListedContents(): List<String> = postRepository.findAllPublicListedContents()

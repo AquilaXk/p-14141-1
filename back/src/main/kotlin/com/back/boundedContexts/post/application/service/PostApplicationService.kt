@@ -201,6 +201,8 @@ class PostApplicationService(
 
     fun findPublicDetailContentById(id: Long): PublicPostDetailContentCacheDto? = postRepository.findPublicDetailContentById(id)
 
+    fun isPublicDetailReadable(id: Long): Boolean = postRepository.isPublicDetailReadable(id)
+
     fun findLatest(): Post? = postRepository.findFirstByOrderByIdDesc()
 
     @Transactional

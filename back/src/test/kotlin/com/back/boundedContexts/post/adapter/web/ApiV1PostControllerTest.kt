@@ -353,30 +353,33 @@ class ApiV1PostControllerTest : BaseControllerIntegrationTest() {
         }
 
         @Test
-        fun `비로그인 상세 조회는 ETag 조건부 요청에 304를 반환한다`() {
+        fun `비로그인 상세 조회는 공유 캐시와 ETag를 허용하지 않는다`() {
             val post = postFacade.findPagedByKw("", PostSearchSortType1.CREATED_AT, 1, 1).content.first()
-
-            val etag =
-                requireNotNull(
-                    mvc
-                        .get("/post/api/v1/posts/${post.id}")
-                        .andExpect {
-                            status { isOk() }
-                            header { exists(HttpHeaders.ETAG) }
-                        }.andReturn()
-                        .response
-                        .getHeader(HttpHeaders.ETAG),
-                )
-
-            assertThat(etag).isNotBlank()
 
             mvc
                 .get("/post/api/v1/posts/${post.id}") {
-                    header(HttpHeaders.IF_NONE_MATCH, etag)
+                    header(HttpHeaders.IF_NONE_MATCH, "*")
                 }.andExpect {
-                    status { isNotModified() }
-                    header { string(HttpHeaders.ETAG, etag) }
+                    status { isOk() }
+                    header { string(HttpHeaders.CACHE_CONTROL, "private, no-store, max-age=0") }
+                    header { doesNotExist(HttpHeaders.ETAG) }
+                    header { doesNotExist("Surrogate-Key") }
+                    header { doesNotExist("Cache-Tag") }
                 }
+        }
+
+        @Test
+        fun `비공개 전환은 남아 있는 익명 snapshot보다 우선한다`() {
+            val actor = actorApplicationService.findByEmail("user1@test.com").getOrThrow()
+            val post = writePost(actor, "링크 공개 접근 검사", "캐시 본문", true, false)
+            mvc.get("/post/api/v1/posts/${post.id}").andExpect { status { isOk() } }
+            val snapshotCache = requireNotNull(cacheManager.getCache(PostQueryCacheNames.DETAIL_PUBLIC_SNAPSHOT))
+            assertThat(snapshotCache.get(post.id)).isNotNull
+            // 후속 task와 캐시 삭제 없이 DB 공개 상태만 변경한다.
+            jdbcTemplate.update("UPDATE post SET published = false WHERE id = ?", post.id)
+            entityManager.clear()
+            assertThat(snapshotCache.get(post.id)).isNotNull
+            mvc.get("/post/api/v1/posts/${post.id}").andExpect { status { isNotFound() } }
         }
 
         @Test

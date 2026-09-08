@@ -107,6 +107,8 @@ interface PostRepositoryPort {
 
     fun findPublicDetailById(id: Long): Post?
 
+    fun isPublicDetailReadable(id: Long): Boolean
+
     fun findPublicDetailContentById(id: Long): PublicPostDetailContentCacheDto?
 
     fun findAllPublicListedContents(): List<String>

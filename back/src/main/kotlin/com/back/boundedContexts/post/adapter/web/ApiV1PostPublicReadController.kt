@@ -361,14 +361,12 @@ class ApiV1PostPublicReadController(
                 PublicPostUrlCanonicalizer.canonicalizePostWithContent(
                     postPublicReadQueryUseCase.getPublicPostDetail(id),
                 )
-            val etagSeed = postPublicReadResponseFactory.buildPublicDetailEtagSeed(data)
-            return postPublicReadResponseFactory.respondWithEtag(
-                request = request,
+            return postPublicReadResponseFactory.respondNoStore(
                 response = response,
                 cachePolicy = PostPublicReadCachePolicies.DETAIL,
-                surrogateKeys = setOf(PostCacheTags.DETAIL, PostCacheTags.byPostId(id)),
-                etagSeed = etagSeed,
+                surrogateKeys = emptySet(),
                 startedAtNanos = startedAtNanos,
+                originDescription = "detail",
                 body = data,
             )
         }

@@ -9,6 +9,8 @@ interface PostRepository :
     PostRepositoryCustom {
     fun countByAuthor(author: Member): Long
 
+    fun existsByIdAndPublishedTrue(id: Long): Boolean
+
     fun existsByAuthorAndTitle(
         author: Member,
         title: String,
