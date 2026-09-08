@@ -51,6 +51,29 @@ assert_actions_only() {
     || fail "${script#"${repo_root}/"} must fail closed with exit 2 outside GitHub Actions (got ${status})"
 }
 
+# 실제 cleanup 함수만 실행해 무거운 gate 없이 실패 증거와 종료 코드를 검증한다.
+assert_failed_coverage_is_retained() (
+  fixture_root="$(mktemp -d "${TMPDIR:-/tmp}/aquila-standalone-evidence-test.XXXXXX")"
+  trap 'rm -rf "${fixture_root}"' EXIT
+  export work_dir="${fixture_root}/work"
+  export platform_root="${work_dir}/archive"
+  export artifact_dir="${fixture_root}/evidence"
+  mkdir -p "${platform_root}/back/build/reports/jacoco/test" "${artifact_dir}"
+  printf '<report name="coverage-fixture"/>\n' > "${fixture_root}/expected.xml"
+  cp "${fixture_root}/expected.xml" "${platform_root}/back/build/reports/jacoco/test/jacocoTestReport.xml"
+  cleanup_definition="$(sed -n '/^cleanup() {$/,/^}$/p' "${platform_script}")"
+  status=0
+  bash -c "${cleanup_definition}
+trap cleanup EXIT
+exit 7" || status=$?
+  [[ "${status}" -eq 7 ]] || fail "cleanup changed the failed gate exit code"
+  [[ ! -e "${work_dir}" ]] || fail "cleanup left its temporary archive"
+  cmp "${fixture_root}/expected.xml" "${artifact_dir}/jacocoTestReport.xml" \
+    || fail "cleanup lost full-union coverage evidence"
+)
+
+assert_failed_coverage_is_retained
+
 for file in "${platform_script}" "${materializer_script}" "${materializer_test}" "${workflow}"; do
   assert_file "${file}"
 done
