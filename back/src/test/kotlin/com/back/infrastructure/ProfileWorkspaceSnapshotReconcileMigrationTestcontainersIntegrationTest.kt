@@ -167,6 +167,25 @@ class ProfileWorkspaceSnapshotReconcileMigrationTestcontainersIntegrationTest {
     }
 
     @Test
+    fun `projects only safe legacy links into both snapshots without changing source rows`() {
+        postgres.createConnection("").use { connection ->
+            insertMembers(connection, 1L..1L)
+            val raw =
+                """{"items":[{"icon":"service","label":"Unsafe","href":"javascript:alert(1)"},""" +
+                    """{"icon":"service","label":"Source","href":"https://example.com/source"}]}"""
+            insertAttr(connection, 1, "profileServiceLinks", raw)
+            val before = legacyAttrs(connection, 1)
+
+            assertEquals(1, executeMigration())
+
+            val expected = listOf(MemberProfileLinkItem("service", "Source", "https://example.com/source"))
+            assertEquals(expected, decodedWorkspace(connection, 1, "profileWorkspaceDraft").serviceLinks)
+            assertEquals(expected, decodedWorkspace(connection, 1, "profileWorkspacePublished").serviceLinks)
+            assertEquals(before, legacyAttrs(connection, 1))
+        }
+    }
+
+    @Test
     fun `rejects partial blank and invalid persisted pairs before any insert`() {
         listOf(
             mapOf("profileWorkspaceDraft" to workspace("one", "role")),
@@ -175,6 +194,12 @@ class ProfileWorkspaceSnapshotReconcileMigrationTestcontainersIntegrationTest {
             mapOf(
                 "profileWorkspaceDraft" to noncanonicalWorkspace(),
                 "profileWorkspacePublished" to noncanonicalWorkspace(),
+            ),
+            // 누락된 JSON 필드가 기본값으로 읽혀도 정본으로 오인하거나 다른 회원을 먼저 수정하면 안 된다.
+            mapOf("profileWorkspaceDraft" to "{}", "profileWorkspacePublished" to "{}"),
+            mapOf(
+                "profileWorkspaceDraft" to """{"content":{"aboutSections":[{}],"aboutProjects":[{}],"serviceLinks":[{}]}}""",
+                "profileWorkspacePublished" to """{"content":{"aboutSections":[{}],"aboutProjects":[{}],"serviceLinks":[{}]}}""",
             ),
         ).forEach { invalidPair ->
             resetSchema()
