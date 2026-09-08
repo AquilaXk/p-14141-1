@@ -355,6 +355,51 @@ class PostApplicationServiceAfterCommitTest : BasePostApplicationServiceAfterCom
             .containsExactly(PostReadCacheInvalidationTarget.ADMIN_POSTS_FIRST_PAGE)
     }
 
+    @Test
+    @DisplayName("링크 공개 변경은 관리자 목록과 상세 캐시를 함께 무효화한다")
+    fun unlistedChangesEvictDetailAfterCommit() {
+        val admin = actorApplicationService.findByEmail("admin@test.com")!!
+        for ((beforePublished, afterPublished) in listOf(true to false, false to true, true to true)) {
+            val post =
+                transactionTemplate.execute {
+                    postApplicationService.write(
+                        author = admin,
+                        title = "unlisted cache source",
+                        content = "original content",
+                        published = beforePublished,
+                        listed = false,
+                        summaryMode = PostSummaryMode.AUTO,
+                    )
+                }!!
+            clearSideEffectMocks()
+            val previousTaskIds = taskRepository.findAll().map { it.id }.toSet()
+            transactionTemplate.executeWithoutResult {
+                val latest = postApplicationService.findById(post.id)!!
+                postApplicationService.modify(
+                    actor = admin,
+                    post = latest,
+                    title = latest.title,
+                    content = "updated content",
+                    published = afterPublished,
+                    listed = false,
+                    expectedVersion = latest.version ?: 0L,
+                )
+            }
+            val payload = singlePostWriteSideEffectPayloadSince(previousTaskIds)
+            assertThat(payload.cacheInvalidationTargets).containsExactlyInAnyOrder(
+                PostReadCacheInvalidationTarget.ADMIN_POSTS_FIRST_PAGE,
+                PostReadCacheInvalidationTarget.DETAIL,
+            )
+            postWriteSideEffectHandler.handle(payload)
+            assertThat(cacheLookupNames()).contains(
+                PostQueryCacheNames.DETAIL_PUBLIC_SNAPSHOT,
+                PostQueryCacheNames.DETAIL_PUBLIC_META,
+                PostQueryCacheNames.DETAIL_PUBLIC_CONTENT,
+                PostQueryCacheNames.DETAIL_PUBLIC_NEGATIVE,
+            )
+        }
+    }
+
     private fun clearSideEffectMocks() {
         clearInvocations(
             uploadedFileRetentionService,

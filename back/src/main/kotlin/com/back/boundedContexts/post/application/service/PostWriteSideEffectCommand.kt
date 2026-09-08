@@ -136,6 +136,10 @@ internal sealed class PostReadCacheInvalidationScope(
 
     data object AdminPostListOnly : PostReadCacheInvalidationScope(setOf(PostReadCacheInvalidationTarget.ADMIN_POSTS_FIRST_PAGE))
 
+    data object AdminPostListAndDetail : PostReadCacheInvalidationScope(
+        setOf(PostReadCacheInvalidationTarget.ADMIN_POSTS_FIRST_PAGE, PostReadCacheInvalidationTarget.DETAIL),
+    )
+
     class PublicPostModified(
         impacts: Set<PostPublicChangeImpact>,
     ) : PostReadCacheInvalidationScope(targetsForModifiedPublicPost(impacts))

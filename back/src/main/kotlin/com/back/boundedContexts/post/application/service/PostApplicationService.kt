@@ -234,6 +234,7 @@ class PostApplicationService(
         val previousSummaryText = post.summaryText
         val previousSummarySource = post.summarySource
         val wasPublic = isPubliclyListed(post)
+        val wasPublished = post.published
         val previousTags = postTagIndexService.extractNormalizedTags(previousContent)
         try {
             val contentHtmlTrust =
@@ -309,6 +310,8 @@ class PostApplicationService(
                                 summaryChanged = summaryChanged,
                             ),
                         )
+                    } else if (wasPublished || post.published) {
+                        PostReadCacheInvalidationScope.AdminPostListAndDetail
                     } else {
                         PostReadCacheInvalidationScope.AdminPostListOnly
                     },

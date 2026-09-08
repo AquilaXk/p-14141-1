@@ -83,6 +83,11 @@ class PostReadCacheInvalidationScopeTest {
             .containsExactly(PostReadCacheInvalidationTarget.DETAIL)
         assertThat(evictedTargets(PostReadCacheInvalidationScope.AdminPostListOnly))
             .containsExactly(PostReadCacheInvalidationTarget.ADMIN_POSTS_FIRST_PAGE)
+        assertThat(evictedTargets(PostReadCacheInvalidationScope.AdminPostListAndDetail))
+            .containsExactlyInAnyOrder(
+                PostReadCacheInvalidationTarget.ADMIN_POSTS_FIRST_PAGE,
+                PostReadCacheInvalidationTarget.DETAIL,
+            )
     }
 
     private fun evictedTargets(scope: PostReadCacheInvalidationScope): List<PostReadCacheInvalidationTarget> =
