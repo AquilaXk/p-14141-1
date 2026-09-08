@@ -141,6 +141,9 @@ class TaskPayloadEnvelopeCodecTest {
         assertQuarantined(TaskQuarantineReason.MALFORMED_PAYLOAD) {
             codec.decode(objectMapper.writeValueAsString(malformed), metadata(payload, entry.taskType), entry)
         }
+        assertQuarantined(TaskQuarantineReason.MALFORMED_PAYLOAD) {
+            codec.decode(objectMapper.writeValueAsString(malformed.copy(payloadJson = "null")), metadata(payload, entry.taskType), entry)
+        }
 
         val expiringPayload =
             ExpiringStubTaskPayload(

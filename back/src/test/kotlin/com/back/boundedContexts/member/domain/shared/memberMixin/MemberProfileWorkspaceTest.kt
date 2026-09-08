@@ -86,6 +86,37 @@ class MemberProfileWorkspaceTest {
     }
 
     @Test
+    fun `stored project without link label is rejected without repairing its bytes`() {
+        val raw =
+            encodeMemberProfileWorkspaceContent(
+                MemberProfileWorkspaceContent(
+                    aboutProjects =
+                        listOf(MemberProfileAboutProjectBlock("blog", "Blog", "Notes", "Maintainer", "https://example.com", "Read")),
+                ),
+            ).replace(",\"linkLabel\":\"Read\"", "")
+
+        // JSON 기본값으로 읽을 수 있어도 손상된 저장 원문을 정상 정본으로 복구해 반환하지 않는다.
+        listOf(PROFILE_WORKSPACE_DRAFT, PROFILE_WORKSPACE_PUBLISHED).forEach { name ->
+            val member = memberWithWorkspace(name, raw)
+            assertThatThrownBy {
+                if (name == PROFILE_WORKSPACE_DRAFT) {
+                    member.getProfileWorkspaceDraftContent()
+                } else {
+                    member.getProfileWorkspacePublishedContent()
+                }
+            }.isInstanceOf(IllegalStateException::class.java)
+                .hasMessage("$name is missing or invalid")
+            val attr =
+                if (name == PROFILE_WORKSPACE_DRAFT) {
+                    member.getProfileWorkspaceDraftAttr()
+                } else {
+                    member.getProfileWorkspacePublishedAttr()
+                }
+            assertThat(attr.strValue).isEqualTo(raw)
+        }
+    }
+
+    @Test
     fun `draft workspace rejects malformed stored JSON`() {
         val member = memberWithWorkspace(PROFILE_WORKSPACE_DRAFT, "{malformed")
 

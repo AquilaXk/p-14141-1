@@ -84,9 +84,6 @@ class TaskPayloadEnvelopeCodec(
             throw quarantineException(TaskQuarantineReason.UNKNOWN_SCHEMA_VERSION)
         }
         val payload = decodePayload(envelope.payloadJson, entry.payloadClass)
-        if (!entry.payloadClass.isInstance(payload)) {
-            throw quarantineException(TaskQuarantineReason.MALFORMED_PAYLOAD)
-        }
         validatePayloadMetadata(payload, storedMetadata)
         validateExpiration(envelope, payload, entry.sensitivity)
         return payload
